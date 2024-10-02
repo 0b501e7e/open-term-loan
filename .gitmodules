@@ -10,3 +10,6 @@
 [submodule "modules/maple-proxy-factory"]
 	path = modules/maple-proxy-factory
 	url = https://github.com/maple-labs/maple-proxy-factory.git
+[submodule "modules/ironblocks/onchain-firewall"]
+	path = modules/ironblocks/onchain-firewall
+	url = https://github.com/ironblocks/onchain-firewall
