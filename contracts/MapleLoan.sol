@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity 0.8.7;
 
+import {VennFirewallConsumer} from "@ironblocks/firewall-consumer/contracts/consumers/VennFirewallConsumer.sol";
 import { IERC20 }                from "../modules/erc20/contracts/interfaces/IERC20.sol";
 import { ERC20Helper }           from "../modules/erc20-helper/src/ERC20Helper.sol";
 import { IMapleProxyFactory }    from "../modules/maple-proxy-factory/contracts/interfaces/IMapleProxyFactory.sol";
@@ -31,7 +32,7 @@ import { MapleLoanStorage } from "./MapleLoanStorage.sol";
 */
 
 /// @title MapleLoan implements an open term loan, and is intended to be proxied.
-contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
+contract MapleLoan is VennFirewallConsumer, IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
 
     uint256 public constant override HUNDRED_PERCENT = 1e6;
 
@@ -54,17 +55,17 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     /*** Administrative Functions                                                                                                       ***/
     /**************************************************************************************************************************************/
 
-    function migrate(address migrator_, bytes calldata arguments_) external override whenNotPaused {
+    function migrate(address migrator_, bytes calldata arguments_) external override whenNotPaused firewallProtected {
         require(msg.sender == _factory(),        "ML:M:NOT_FACTORY");
         require(_migrate(migrator_, arguments_), "ML:M:FAILED");
     }
 
-    function setImplementation(address newImplementation_) external override whenNotPaused {
+    function setImplementation(address newImplementation_) external override whenNotPaused firewallProtected {
         require(msg.sender == _factory(),               "ML:SI:NOT_FACTORY");
         require(_setImplementation(newImplementation_), "ML:SI:FAILED");
     }
 
-    function upgrade(uint256 toVersion_, bytes calldata arguments_) external override whenNotPaused {
+    function upgrade(uint256 toVersion_, bytes calldata arguments_) external override whenNotPaused firewallProtected {
         require(msg.sender == IGlobalsLike(globals()).securityAdmin(), "ML:U:NO_AUTH");
 
         emit Upgraded(toVersion_, arguments_);
@@ -76,7 +77,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     /*** Borrow Functions                                                                                                               ***/
     /**************************************************************************************************************************************/
 
-    function acceptBorrower() external override whenNotPaused {
+    function acceptBorrower() external override whenNotPaused firewallProtected {
         require(msg.sender == pendingBorrower, "ML:AB:NOT_PENDING_BORROWER");
 
         delete pendingBorrower;
@@ -85,7 +86,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     }
 
     function acceptNewTerms(address refinancer_, uint256 deadline_, bytes[] calldata calls_)
-        external override whenNotPaused onlyBorrower returns (bytes32 refinanceCommitment_)
+        external override whenNotPaused onlyBorrower firewallProtected returns (bytes32 refinanceCommitment_)
     {
         require(refinancer_.code.length != uint256(0), "ML:ANT:INVALID_REFINANCER");
         require(block.timestamp <= deadline_,          "ML:ANT:EXPIRED_COMMITMENT");
@@ -170,7 +171,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     }
 
     function makePayment(uint256 principalToReturn_)
-        external override whenNotPaused
+        external override whenNotPaused firewallProtected
         returns (
             uint256 interest_,
             uint256 lateInterest_,
@@ -231,7 +232,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         );
     }
 
-    function setPendingBorrower(address pendingBorrower_) external override whenNotPaused onlyBorrower {
+    function setPendingBorrower(address pendingBorrower_) external override whenNotPaused onlyBorrower firewallProtected {
         require(IGlobalsLike(globals()).isBorrower(pendingBorrower_), "ML:SPB:INVALID_BORROWER");
 
         emit PendingBorrowerSet(pendingBorrower = pendingBorrower_);
@@ -241,7 +242,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     /*** Lend Functions                                                                                                                 ***/
     /**************************************************************************************************************************************/
 
-    function acceptLender() external override whenNotPaused {
+    function acceptLender() external override whenNotPaused firewallProtected {
         require(msg.sender == pendingLender, "ML:AL:NOT_PENDING_LENDER");
 
         delete pendingLender;
@@ -250,7 +251,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     }
 
     function callPrincipal(uint256 principalToReturn_)
-        external override whenNotPaused onlyLender
+        external override whenNotPaused onlyLender firewallProtected
         returns (uint40 paymentDueDate_, uint40 defaultDate_)
     {
         require(dateFunded != 0,                                            "ML:C:LOAN_INACTIVE");
@@ -265,7 +266,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         );
     }
 
-    function fund() external override whenNotPaused onlyLender returns (uint256 fundsLent_, uint40 paymentDueDate_, uint40 defaultDate_) {
+    function fund() external override whenNotPaused onlyLender firewallProtected returns (uint256 fundsLent_, uint40 paymentDueDate_, uint40 defaultDate_) {
         require(dateFunded == 0, "ML:F:LOAN_ACTIVE");
         require(principal != 0,  "ML:F:LOAN_CLOSED");
 
@@ -280,7 +281,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         require(ERC20Helper.transferFrom(fundsAsset, msg.sender, borrower, fundsLent_), "ML:F:TRANSFER_FROM_FAILED");
     }
 
-    function impair() external override whenNotPaused onlyLender returns (uint40 paymentDueDate_, uint40 defaultDate_) {
+    function impair() external override whenNotPaused onlyLender firewallProtected returns (uint40 paymentDueDate_, uint40 defaultDate_) {
         require(dateFunded != 0, "ML:I:LOAN_INACTIVE");
 
         // NOTE: Impairing an already-impaired loan simply updates the `dateImpaired`, which can push the due date further.
@@ -293,7 +294,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     }
 
     function proposeNewTerms(address refinancer_, uint256 deadline_, bytes[] calldata calls_)
-        external override whenNotPaused onlyLender returns (bytes32 refinanceCommitment_)
+        external override whenNotPaused onlyLender firewallProtected returns (bytes32 refinanceCommitment_)
     {
         require(dateFunded != 0,                                                    "ML:PNT:LOAN_INACTIVE");
         require(block.timestamp <= deadline_,                                       "ML:PNT:INVALID_DEADLINE");
@@ -308,7 +309,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         );
     }
 
-    function removeCall() external override whenNotPaused onlyLender returns (uint40 paymentDueDate_, uint40 defaultDate_) {
+    function removeCall() external override whenNotPaused onlyLender firewallProtected returns (uint40 paymentDueDate_, uint40 defaultDate_) {
         require(dateCalled != 0, "ML:RC:NOT_CALLED");
 
         delete dateCalled;
@@ -320,7 +321,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         );
     }
 
-    function removeImpairment() external override whenNotPaused onlyLender returns (uint40 paymentDueDate_, uint40 defaultDate_) {
+    function removeImpairment() external override whenNotPaused onlyLender firewallProtected returns (uint40 paymentDueDate_, uint40 defaultDate_) {
         require(dateImpaired != 0, "ML:RI:NOT_IMPAIRED");
 
         delete dateImpaired;
@@ -331,7 +332,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         );
     }
 
-    function repossess(address destination_) external override whenNotPaused onlyLender returns (uint256 fundsRepossessed_) {
+    function repossess(address destination_) external override whenNotPaused onlyLender firewallProtected returns (uint256 fundsRepossessed_) {
         require(isInDefault(), "ML:R:NOT_IN_DEFAULT");
 
         _clearLoanAccounting();
@@ -347,7 +348,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         require((fundsRepossessed_ == 0) || ERC20Helper.transfer(fundsAsset_, destination_, fundsRepossessed_), "ML:R:TRANSFER_FAILED");
     }
 
-    function setPendingLender(address pendingLender_) external override whenNotPaused onlyLender {
+    function setPendingLender(address pendingLender_) external override whenNotPaused onlyLender firewallProtected {
         emit PendingLenderSet(pendingLender = pendingLender_);
     }
 
@@ -356,7 +357,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
     /**************************************************************************************************************************************/
 
     function rejectNewTerms(address refinancer_, uint256 deadline_, bytes[] calldata calls_)
-        external override whenNotPaused returns (bytes32 refinanceCommitment_)
+        external override whenNotPaused firewallProtected returns (bytes32 refinanceCommitment_)
     {
         require((msg.sender == borrower) || (msg.sender == lender), "ML:RNT:NO_AUTH");
 
@@ -370,7 +371,7 @@ contract MapleLoan is IMapleLoan, MapleProxiedInternals, MapleLoanStorage {
         emit NewTermsRejected(refinanceCommitment_, refinancer_, deadline_, calls_);
     }
 
-    function skim(address token_, address destination_) external override whenNotPaused returns (uint256 skimmed_) {
+    function skim(address token_, address destination_) external override whenNotPaused firewallProtected returns (uint256 skimmed_) {
         require(destination_ != address(0), "ML:S:ZERO_ADDRESS");
 
         address governor_ = IGlobalsLike(globals()).governor();
